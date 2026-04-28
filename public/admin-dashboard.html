@@ -191,9 +191,10 @@
                     <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-wider">
                         <tr>
                             <th class="px-6 py-4 font-medium">User</th>
-                            <th class="px-6 py-4 font-medium">Telegram ID</th>
-                            <th class="px-6 py-4 font-medium">Status / Tier</th>
-                            <th class="px-6 py-4 font-medium text-right">Action</th>
+                            <th class="px-6 py-4 font-medium">Tier</th>
+                            <th class="px-6 py-4 font-medium">Joined</th>
+                            <th class="px-6 py-4 font-medium">Sub Expires</th>
+                            <th class="px-6 py-4 font-medium text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="user-full-table-body" class="divide-y divide-slate-800"></tbody>
@@ -357,24 +358,26 @@
 
         async function fetchData() {
             try {
-                const statsRes = await fetch('/api/stats');
+                const headers = { 'Authorization': `Bearer ${token}` };
+
+                const statsRes = await fetch('/api/stats', { headers });
                 const stats = await statsRes.json();
                 document.getElementById('stat-total-users').innerText = stats.totalUsers || 0;
                 document.getElementById('stat-premium-users').innerText = stats.premiumUsers || 0;
                 document.getElementById('stat-total-alerts').innerText = stats.totalAlerts || 0;
-                document.getElementById('stat-total-revenue').innerText = `$${(stats.totalRevenue || 0).toFixed(2)}`;
+                document.getElementById('stat-total-revenue').innerText = `${(stats.totalRevenue || 0).toFixed(2)}`;
 
-                const priceRes = await fetch('/api/prices');
+                const priceRes = await fetch('/api/prices', { headers });
                 renderPrices(await priceRes.json());
 
-                const alertRes = await fetch('/api/alerts');
+                const alertRes = await fetch('/api/alerts', { headers });
                 const alerts = await alertRes.json();
                 if (Array.isArray(alerts)) {
                     renderAlerts(alerts, 'alert-table-body', 5);
                     renderAlerts(alerts, 'alert-full-table-body', 20);
                 }
 
-                const userRes = await fetch('/api/users');
+                const userRes = await fetch('/api/users', { headers });
                 const users = await userRes.json();
                 if (Array.isArray(users)) {
                     renderUsers(users);
@@ -511,28 +514,34 @@
             users.forEach(user => {
                 const row = document.createElement('tr');
                 row.className = 'table-row transition-colors';
-                let tierColor = 'bg-slate-500/20 text-slate-400';
-                if (user.tier === 'pro') tierColor = 'bg-blue-500/20 text-blue-500';
-                if (user.tier === 'vip') tierColor = 'bg-purple-500/20 text-purple-500';
-                if (user.tier === 'banned') tierColor = 'bg-red-500/20 text-red-500';
                 
-                const expDate = user.subscribed_until ? new Date(user.subscribed_until).toLocaleDateString() : 'Forever/None';
-                
+                const tierBadges = {
+                    free: 'bg-slate-700 text-slate-300',
+                    pro: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+                    vip: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+                    banned: 'bg-red-500/20 text-red-400 border border-red-500/30',
+                };
+                const tierBadge = tierBadges[user.tier] || tierBadges['free'];
+                const expiryDate = user.subscribed_until ? new Date(user.subscribed_until).toLocaleDateString() : 'N/A';
+                const joinedDate = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
+
                 row.innerHTML = `
-                    <td class="px-6 py-4 flex items-center gap-3">
-                        <div class="w-8 h-8 bg-blue-600/20 rounded-full flex items-center justify-center font-medium text-blue-500">@</div>
-                        <span class="font-medium text-sm">${user.username || 'unknown'}</span>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center gap-3">
+                            <div class="font-medium">${user.username || 'N/A'}</div>
+                            <div class="text-sm text-slate-400 font-mono">${user.telegram_id}</div>
+                        </div>
                     </td>
-                    <td class="px-6 py-4 text-xs text-slate-400 font-mono">${user.telegram_id}</td>
-                    <td class="px-6 py-4">
-                        <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase ${tierColor} inline-block mb-1">
-                            ${user.tier || 'free'}
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 font-semibold text-xs rounded-full ${tierBadge}">
+                            ${user.tier.toUpperCase()}
                         </span>
-                        <div class="text-[10px] text-slate-500">Exp: ${expDate}</div>
                     </td>
-                    <td class="px-6 py-4 text-right">
-                        <button onclick="openUserModal(${user.id}, '${user.tier}', '${user.subscribed_until || ''}')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all mr-2">Edit</button>
-                        <button onclick="deleteUser(${user.id})" class="bg-red-900/40 text-red-500 hover:bg-red-900/60 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">Delete</button>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${joinedDate}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-400">${expiryDate}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="openUserModal(${user.id})" class="text-blue-500 hover:text-blue-400">Edit</button>
+                        <button onclick="deleteUser(${user.id})" class="text-red-500 hover:text-red-400 ml-4">Delete</button>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -540,21 +549,29 @@
         }
 
         // --- User Edits ---
-        function openUserModal(id, currentTier, currentExpiry) {
-            document.getElementById('edit-user-id').value = id;
-            document.getElementById('edit-user-tier').value = currentTier || 'free';
-            if (currentExpiry) {
-                // Must convert to YYYY-MM-DD for date input
-                const date = new Date(currentExpiry);
-                document.getElementById('edit-user-expiry').value = date.toISOString().split('T')[0];
-            } else {
-                document.getElementById('edit-user-expiry').value = '';
+        async function openUserModal(userId) {
+            if (!token) return alert('No admin token provided');
+            try {
+                const headers = { 'Authorization': `Bearer ${token}` };
+                const res = await fetch(`/admin/users/${userId}?token=${token}`, { headers });
+                if (!res.ok) throw new Error('Failed to fetch user data');
+                const user = await res.json();
+
+                document.getElementById('edit-user-id').value = user.id;
+                document.getElementById('edit-user-tier').value = user.tier;
+                const expiry = user.subscribed_until ? user.subscribed_until.split('T')[0] : '';
+                document.getElementById('edit-user-expiry').value = expiry;
+                
+                document.getElementById('user-modal').classList.add('active');
+                setTimeout(() => {
+                    document.getElementById('user-modal-content').classList.remove('scale-95');
+                    document.getElementById('user-modal-content').classList.add('scale-100');
+                }, 10);
+
+            } catch (error) {
+                console.error('Error opening user modal:', error);
+                alert('Could not load user data. Please try again.');
             }
-            document.getElementById('user-modal').classList.add('active');
-            setTimeout(() => {
-                document.getElementById('user-modal-content').classList.remove('scale-95');
-                document.getElementById('user-modal-content').classList.add('scale-100');
-            }, 10);
         }
 
         function closeUserModal() {
