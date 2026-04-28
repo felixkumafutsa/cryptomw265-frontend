@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoSpreadX - User Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .card { background-color: #1e293b; border: 1px solid #334155; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-slate-900/50 backdrop-blur-lg border-b border-slate-800 sticky top-0 z-50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <img src="/logo.png" alt="CryptoSpreadX Logo" class="w-10 h-auto">
+                    <h1 class="text-xl font-bold tracking-tight">Crypto<span class="text-blue-500">SpreadX</span></h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span id="user-greeting" class="hidden sm:inline text-sm text-slate-400"></span>
+                    <button id="logout-button" onclick="logout()" class="text-sm font-medium text-slate-400 hover:text-white transition-colors">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto p-4 sm:p-6 lg:p-8">
+        <div id="main-loader" class="flex items-center justify-center h-64">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+
+        <div id="dashboard-content" class="hidden">
+            <!-- Content will be dynamically inserted here -->
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            window.location.href = '/index.html';
+        }
+
+        async function initializeDashboard() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/index.html?error=NotAuthenticated';
+                return;
+            }
+
+            // Fetch user data
+            try {
+                const response = await fetch('/api/user/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch user data');
+                }
+
+                const user = await response.json();
+                document.getElementById('user-greeting').textContent = `Hello, ${user.telegramUsername || 'User'}`;
+                document.getElementById('user-greeting').classList.remove('hidden');
+                
+                // Render appropriate content based on user tier
+                renderUserContent(user);
+
+            } catch (error) {
+                console.error('Initialization Error:', error);
+                logout();
+            } finally {
+                document.getElementById('main-loader').classList.add('hidden');
+                document.getElementById('dashboard-content').classList.remove('hidden');
+            }
+        }
+
+        function renderUserContent(user) {
+            const contentEl = document.getElementById('dashboard-content');
+            if (user.tier === 'free') {
+                contentEl.innerHTML = `
+                    <div class="text-center card p-8 rounded-2xl">
+                        <h2 class="text-2xl font-bold mb-4">Welcome, Free User!</h2>
+                        <p class="text-slate-400 mb-6">Upgrade to a premium plan to unlock powerful arbitrage opportunities.</p>
+                        <a href="/#pricing" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all">
+                            Upgrade Now
+                        </a>
+                    </div>
+                `;
+            } else {
+                // Premium user content (Pro/VIP)
+                contentEl.innerHTML = `
+                    <div class="card p-6 rounded-2xl">
+                        <h2 class="text-xl font-bold mb-4">Your Dashboard</h2>
+                        <p>Welcome, ${user.tier.toUpperCase()} user! Your premium features are active.</p>
+                        <p class="text-sm text-slate-400">Subscription valid until: ${new Date(user.subscribedUntil).toLocaleDateString()}</p>
+                    </div>
+                `;
+            }
+        }
+
+        window.onload = initializeDashboard;
+    </script>
+
+</body>
+</html>
